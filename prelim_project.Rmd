@@ -1,0 +1,162 @@
+---
+title: "project230A"
+author: "Irina Degtiareva"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+#install.packages("fastDummies")
+library(fastDummies)
+
+
+setwd("/Users/irina/STAT MA/stat-230/student")
+
+math <- read.csv("student-mat.csv", sep=";")
+por <- read.csv("student-por.csv", sep=";")
+por <- subset(por, select = -c(school, G1, G2))
+
+pordumm <- dummy_cols(por, select_columns = c("sex", "address", "famsize", "Pstatus", "Medu",
+                                       "Fedu", "Mjob", "Fjob", "reason", "guardian", 
+                                       "traveltime", "studytime", "schoolsup", "famsup", 
+                                       "paid", "activities", "nursery", "higher", "internet", 
+                                       "romantic", "famrel", "freetime", "goout", 
+                                       "Dalc", "Walc", "health"), remove_first_dummy = TRUE)[ ,30:93]
+
+
+```
+
+```{r}
+library(MASS)
+library("car")
+
+full <- lm(G3 ~., data = por)
+summary(full)
+
+high <- lm(G3 ~ higher, data = por)
+summary(high)
+sqrt(hccm (high , type = "hc2" )[2 , 2])
+
+```
+
+```{r}
+fulldumm <- lm(G3 ~., data = pordumm)
+summary(fulldumm)
+high_dumm <- lm(G3 ~ -1 + ., data = pordumm[, -(38)])
+
+beta <- high_dumm$coefficients
+```
+
+```{r}
+install.packages("glmnet")
+install.packages("gglasso")
+library(glmnet)
+library(gglasso)
+
+pordumm_high <- pordumm[, -c(1, 38)]
+X <- as.matrix(pordumm_high)
+y <- as.matrix(pordumm$G3)
+group <- c(1, 2, 3, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7,
+           8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 11, 12, 12, 12,
+           13, 14, 15, 16, 17, 18, 19, 20, 20, 20, 20, 
+           21, 21, 21, 21, 22, 22, 22, 22, 23, 23, 23, 23,
+           24, 24, 24, 24, 25, 25, 25, 25)
+
+lasso <- glmnet(X, y, lambda = 0.1,
+             family="gaussian", alpha=1,
+             intercept = F)
+
+group_lasso <- gglasso(X, y, group=group)
+summary(group_lasso)
+data.frame(group_lasso$beta)
+plot(group_lasso)
+
+gr_cv <- cv.gglasso(x=X, y=y, group=group, 
+            loss="ls", pred.loss="L2", 
+            intercept = F, nfolds=5)
+plot(gr_cv)
+paste(gr_cv$lambda.min, gr_cv$lambda.1se)
+
+gr <- gglasso(X, y, lambda = gr_cv$lambda.1se+0.1,
+             group = group, loss="ls",
+             intercept = F)
+
+df.comp <- data.frame(
+    group = group, 
+    beta = beta,
+    Lasso     = lasso$beta[,1],
+    #Group     = group_lasso$beta[,1]
+    Group     = gr$beta[,1]
+)
+df.comp
+```
+
+```{r}
+library(Matching)
+library(ggplot2)
+library(leaps)
+
+
+nsample = dim(por_high)[1]
+pcovariates = dim(por_high)[2] - 1
+
+subsetmodel = summary(regsubsets(G3 ~ ., 
+                                 nvmax = pcovariates, 
+                                 data = por_high,
+                                 method = "exhaustive"))
+
+subsetrss     = subsetmodel$rss
+subsetaic     = nsample*log(subsetrss/nsample) + 2*(2:(pcovariates + 1))
+subsetbic1    = nsample*log(subsetrss/nsample) + log(nsample)*(2:(pcovariates + 1))
+subsetgcv     = subsetrss*(1-(2:(pcovariates + 1))/nsample)^(-2)
+
+dat = rbind(data.frame(name = "GCV",
+                       n.cov = 1:pcovariates,
+                       measure = subsetgcv),
+            data.frame(name = "AIC",
+                       n.cov = 1:pcovariates,
+                       measure = subsetaic),
+            data.frame(name = "BIC",
+                       n.cov = 1:pcovariates,
+                       measure = subsetbic1))
+```
+
+```{r}
+ggplot(dat) + 
+  geom_point(aes(n.cov, measure), 
+             alpha = 0.7, cex = 0.5) + 
+  facet_wrap(~ name, scale = "free_y") +
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5)) +
+  xlab("#predictors") + ylab("") +
+  ggtitle("School Perfomance Data")
+```
+```{r}
+which.min(subsetaic)
+which.min(subsetbic1)
+which.min(subsetgcv)
+subsetmodel$which[17, ]
+```
+
+
+```{r}
+y <- por$G3
+z <- por$higher
+x <- as.matrix(por[, c("sex", "address", "studytime", "failures", 
+                       "schoolsup", "activities", "internet", 
+                       "romantic", "famrel", "freetime", "Dalc", 
+                       "health")])
+matchest = Match( Y = y , Tr =  z, X = x , BiasAdjust = TRUE )
+summary(matchest)
+
+diff = y[matchest$index.treated] - y[matchest$index.control]
+summary(lm( diff ~ 1))$coef
+```
