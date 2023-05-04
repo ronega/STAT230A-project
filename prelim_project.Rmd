@@ -98,6 +98,51 @@ df.comp
 ```
 
 ```{r}
+```
+
+
+```{r}
+
+pordumm_high <- pordumm[, -c(1, 38)]
+X <- as.matrix(pordumm_high)
+y <- as.matrix(pordumm$higher_yes)
+group <- c(1, 2, 3, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7,
+           8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 11, 12, 12, 12,
+           13, 14, 15, 16, 17, 18, 19, 20, 20, 20, 20, 
+           21, 21, 21, 21, 22, 22, 22, 22, 23, 23, 23, 23,
+           24, 24, 24, 24, 25, 25, 25, 25)
+
+lasso <- glmnet(X, y, lambda = 0.1,
+             family="gaussian", alpha=1,
+             intercept = F)
+
+group_lasso <- gglasso(X, y, group=group)
+summary(group_lasso)
+data.frame(group_lasso$beta)
+plot(group_lasso)
+
+gr_cv <- cv.gglasso(x=X, y=y, group=group, 
+            loss="ls", pred.loss="L2", 
+            intercept = F, nfolds=5)
+plot(gr_cv)
+paste(gr_cv$lambda.min, gr_cv$lambda.1se)
+
+gr <- gglasso(X, y, lambda = gr_cv$lambda.1se+0.01,
+             group = group, loss="ls",
+             intercept = F)
+
+df.comp <- data.frame(
+    group = group, 
+    beta = beta,
+    Lasso     = lasso$beta[,1],
+    #Group     = group_lasso$beta[,1]
+    Group     = gr$beta[,1]
+)
+df.comp
+```
+
+
+```{r}
 library(Matching)
 library(ggplot2)
 library(leaps)
