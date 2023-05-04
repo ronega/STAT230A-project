@@ -12,14 +12,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(dplyr)
-#install.packages("fastDummies")
 library(fastDummies)
 
-
-setwd("/Users/irina/STAT MA/stat-230/student")
-
-math <- read.csv("student-mat.csv", sep=";")
-por <- read.csv("student-por.csv", sep=";")
+math <- read.csv("data/student-mat.csv", sep=";")
+por <- read.csv("data/student-por.csv", sep=";")
 por <- subset(por, select = -c(school, G1, G2))
 
 pordumm <- dummy_cols(por, select_columns = c("sex", "address", "famsize", "Pstatus", "Medu",
