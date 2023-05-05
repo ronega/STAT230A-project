@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Created dummy variables
 
 ```{r}
 library(dplyr)
@@ -19,137 +20,156 @@ por <- read.csv("data/student-por.csv", sep=";")
 por <- subset(por, select = -c(school, G1, G2))
 
 pordumm <- dummy_cols(por, select_columns = c("sex", "address", "famsize", "Pstatus", "Medu",
-                                       "Fedu", "Mjob", "Fjob", "reason", "guardian", 
-                                       "traveltime", "studytime", "schoolsup", "famsup", 
-                                       "paid", "activities", "nursery", "higher", "internet", 
-                                       "romantic", "famrel", "freetime", "goout", 
-                                       "Dalc", "Walc", "health"), remove_first_dummy = TRUE)[ ,30:93]
-
-
+                                              "Fedu", "Mjob", "Fjob", "reason", "guardian", 
+                                              "traveltime", "studytime", "schoolsup", "famsup", 
+                                              "paid", "activities", "nursery", "higher", "internet", 
+                                              "romantic", "famrel", "freetime", "goout", 
+                                              "Dalc", "Walc", "health"), 
+                      remove_first_dummy = TRUE, 
+                      remove_selected_columns = TRUE)
 ```
+
+# Build model for the means within groups
 
 ```{r}
 library(MASS)
-library("car")
+library(car)
 
-full <- lm(G3 ~., data = por)
-summary(full)
-
-high <- lm(G3 ~ higher, data = por)
-summary(high)
-sqrt(hccm (high , type = "hc2" )[2 , 2])
-
+model_high <- lm(G3 ~ higher, data = por)
+summary(model_high)
+cat("HCCM Error for coef:", round(sqrt(hccm (model_high , type = "hc2" )[2 , 2]), 3))
 ```
+
+# Save full model
 
 ```{r}
-fulldumm <- lm(G3 ~., data = pordumm)
-summary(fulldumm)
-high_dumm <- lm(G3 ~ -1 + ., data = pordumm[, -(38)])
+full_model <- lm(G3 ~., data = pordumm)
+summary(full_model)
 
-beta <- high_dumm$coefficients
+data_wout_h <- pordumm %>% dplyr::select(-higher_yes)
+full_model_wout_h <- lm(G3 ~ ., data = data_wout_h)
+
+beta <- full_model_wout_h$coefficients
 ```
+Next steps:
+
+1. Fit model $ Y\sim \beta_1 x_1+\beta_2 x_2+...+\beta_k x_k$ and choose variables
+2. Fit model $ Z\sim \gamma_1 x_1+\gamma_2 x_2+...+\gamma_k x_k$ and choose variables
+
+Why?
+- Define all variables where we have connection between $Y$ and $x_i$; same for $Z$ and $x_i$ so we could remove bias in the final model.
+
+# Variable Selection via Grouped Lasso for G3
 
 ```{r}
 library(glmnet)
 library(gglasso)
 
-pordumm_high <- pordumm[, -c(1, 38)]
-X <- as.matrix(pordumm_high)
+data <- pordumm %>% dplyr::select(-c('G3', 'higher_yes'))
+X <- as.matrix(data)
 y <- as.matrix(pordumm$G3)
-group <- c(1, 2, 3, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7,
-           8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 11, 12, 12, 12,
-           13, 14, 15, 16, 17, 18, 19, 20, 20, 20, 20, 
-           21, 21, 21, 21, 22, 22, 22, 22, 23, 23, 23, 23,
-           24, 24, 24, 24, 25, 25, 25, 25)
+
+group <- c(1, 2, 3, 4, 5, 6, 7, 
+           8, 8, 8, 8, 
+           9, 9, 9, 9, 
+           10, 10, 10, 10, 
+           11, 11, 11, 11, 
+           12, 12, 12, 13, 
+           13, 14, 
+           14, 14, 
+           15, 15, 15, 
+           16, 17, 18, 19, 20, 21, 22, 
+           23, 23, 23, 23, 
+           24, 24, 24, 24, 
+           25, 25, 25, 25, 
+           26, 26, 26, 26, 
+           27, 27, 27, 27, 
+           28, 28, 28, 28)
 
 lasso <- glmnet(X, y, lambda = 0.1,
-                family="gaussian", alpha=1)
+                family="gaussian", alpha=1,
+                intercept = TRUE)
 
-group_lasso <- gglasso(X, y, group=group)
-summary(group_lasso)
-data.frame(group_lasso$beta)
-plot(group_lasso)
+# Just to show this is irrelevant
+lasso <- cv.glmnet(X, y, aplha=1,
+                   family="gaussian")
+plot(lasso)
+lasso$lambda.min
 
-gr_cv <- cv.gglasso(x=X, y=y, group=group, 
-            loss="ls", pred.loss="L2", nfolds=5)
+gr_lasso<- cv.gglasso(X, y, 
+                      group = group,
+                      pred.loss="L2",
+                      loss="ls")
 
-plot(gr_cv)
-paste(gr_cv$lambda.min, gr_cv$lambda.1se)
+gr_lasso_fitted <- gglasso(X, y,
+                           group = group,
+                           lambda = gr_lasso$lambda.1se,
+                           loss="ls")
 
-gr <- gglasso(X, y, lambda = gr_cv$lambda.1se+0.1,
-             group = group, loss="ls",
-             intercept = F)
-
-df.comp <- data.frame(
-    group = group, 
-    beta = beta,
-    Lasso     = lasso$beta[,1],
-    #Group     = group_lasso$beta[,1]
-    Group     = gr$beta[,1]
+coefs_z <- data.frame(
+  z_initial = beta,
+  z_gr_lasso = coef(gr_lasso_fitted)
 )
-df.comp
+names(coefs_z) <- c("z_initial", "z_from_gr_lasso")
 ```
 
+# Variable Selection via Grouped Lasso for Y
+
 ```{r}
-library(Matching)
-library(ggplot2)
-library(leaps)
+library(glmnet)
+library(gglasso)
 
+data <- pordumm %>% dplyr::select(-c('G3', 'higher_yes'))
+X <- as.matrix(data)
+y <- as.matrix(pordumm$higher_yes)
+group <- c(1, 2, 3, 4, 5, 6, 7, 
+           8, 8, 8, 8, 
+           9, 9, 9, 9, 
+           10, 10, 10, 10, 
+           11, 11, 11, 11, 
+           12, 12, 12, 13, 
+           13, 14, 
+           14, 14, 
+           15, 15, 15, 
+           16, 17, 18, 19, 20, 21, 22, 
+           23, 23, 23, 23, 
+           24, 24, 24, 24, 
+           25, 25, 25, 25, 
+           26, 26, 26, 26, 
+           27, 27, 27, 27, 
+           28, 28, 28, 28)
 
-nsample = dim(por_high)[1]
-pcovariates = dim(por_high)[2] - 1
+lasso <- glmnet(X, y, lambda = 0.1,
+                family="gaussian", alpha=1,
+                intercept = TRUE)
 
-subsetmodel = summary(regsubsets(G3 ~ ., 
-                                 nvmax = pcovariates, 
-                                 data = por_high,
-                                 method = "exhaustive"))
+# Just to show this is irrelevant
+lasso <- cv.glmnet(X, y, aplha=1,
+                   family="gaussian")
+plot(lasso)
+lasso$lambda.min
 
-subsetrss     = subsetmodel$rss
-subsetaic     = nsample*log(subsetrss/nsample) + 2*(2:(pcovariates + 1))
-subsetbic1    = nsample*log(subsetrss/nsample) + log(nsample)*(2:(pcovariates + 1))
-subsetgcv     = subsetrss*(1-(2:(pcovariates + 1))/nsample)^(-2)
+gr_lasso<- cv.gglasso(X, y, 
+                      group = group,
+                      pred.loss="L2",
+                      loss="ls")
 
-dat = rbind(data.frame(name = "GCV",
-                       n.cov = 1:pcovariates,
-                       measure = subsetgcv),
-            data.frame(name = "AIC",
-                       n.cov = 1:pcovariates,
-                       measure = subsetaic),
-            data.frame(name = "BIC",
-                       n.cov = 1:pcovariates,
-                       measure = subsetbic1))
+gr_lasso_fitted <- gglasso(X, y,
+                           group = group,
+                           lambda = gr_lasso$lambda.1se,
+                           loss="ls")
+
+coefs_y <- data.frame(
+  y_initial = beta,
+  y_gr_lasso = coef(gr_lasso_fitted)
+)
+names(coefs_y) <- c("y_initial", "y_from_gr_lasso")
 ```
 
-```{r}
-ggplot(dat) + 
-  geom_point(aes(n.cov, measure), 
-             alpha = 0.7, cex = 0.5) + 
-  facet_wrap(~ name, scale = "free_y") +
-  theme_bw() + 
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        plot.title = element_text(hjust = 0.5)) +
-  xlab("#predictors") + ylab("") +
-  ggtitle("School Perfomance Data")
-```
-```{r}
-which.min(subsetaic)
-which.min(subsetbic1)
-which.min(subsetgcv)
-subsetmodel$which[17, ]
-```
-
+# Combine coefs
 
 ```{r}
-y <- por$G3
-z <- por$higher
-x <- as.matrix(por[, c("sex", "address", "studytime", "failures", 
-                       "schoolsup", "activities", "internet", 
-                       "romantic", "famrel", "freetime", "Dalc", 
-                       "health")])
-matchest = Match( Y = y , Tr =  z, X = x , BiasAdjust = TRUE )
-summary(matchest)
-
-diff = y[matchest$index.treated] - y[matchest$index.control]
-summary(lm( diff ~ 1))$coef
+all_coefs <- cbind(coefs_y, coefs_z)
+all_coefs$union <- all_coefs$y_from_gr_lasso != 0 | all_coefs$z_from_gr_lasso != 0
+all_coefs %>% filter(union == TRUE)
 ```

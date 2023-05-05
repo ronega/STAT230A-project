@@ -25,7 +25,10 @@ pordumm <- dummy_cols(por, select_columns = c("sex", "address", "famsize", "Psta
                                        "romantic", "famrel", "freetime", "goout", 
                                        "Dalc", "Walc", "health"), remove_first_dummy = TRUE)[ ,30:93]
 
-
+# RETURN AGE!
+dim(pordumm)
+sort(colnames(pordumm))
+pordumm
 ```
 
 ```{r}
@@ -50,8 +53,6 @@ beta <- high_dumm$coefficients
 ```
 
 ```{r}
-install.packages("glmnet")
-install.packages("gglasso")
 library(glmnet)
 library(gglasso)
 
@@ -91,9 +92,6 @@ df.comp <- data.frame(
     Group     = gr$beta[,1]
 )
 df.comp
-```
-
-```{r}
 ```
 
 
