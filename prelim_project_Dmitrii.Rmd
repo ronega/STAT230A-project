@@ -173,3 +173,20 @@ all_coefs <- cbind(coefs_y, coefs_z)
 all_coefs$union <- all_coefs$y_from_gr_lasso != 0 | all_coefs$z_from_gr_lasso != 0
 all_coefs %>% filter(union == TRUE)
 ```
+
+```{r}
+final_data <- por %>% dplyr::select('age', 'failures', 'absences', 
+                                    'sex', 'address', 'Medu', 'internet', 
+                                    'higher', 'G3')
+
+final_data <- dummy_cols(final_data, select_columns = c("sex", "address", "Medu", 
+                                                 "internet", 'higher'),
+                         remove_selected_columns = TRUE,
+                         remove_first_dummy = TRUE)
+
+
+summary(lm(G3 ~ ., data=final_data))$coefficients
+summary(full_model)$coefficients
+
+confint(lm(G3 ~ ., data=final_data))
+```
