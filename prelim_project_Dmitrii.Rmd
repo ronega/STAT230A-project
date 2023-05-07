@@ -23,6 +23,18 @@ por <- read.csv("data/student-por.csv", sep=";")
 por <- subset(por, select = -c(school, G1, G2))
 ```
 
+# Small EDA
+
+```{r}
+por %>% 
+  group_by(higher) %>% 
+  summarise(n = n())
+
+math %>% 
+  group_by(higher) %>% 
+  summarise(n = n())
+```
+
 # Model for Portugese
 
 ## Created dummy variables
@@ -189,12 +201,38 @@ final_data <- dummy_cols(final_data, select_columns = c("sex", "address", "Medu"
                          remove_first_dummy = TRUE)
 
 
-summary(full_model)$coefficients
-confint(full_model)
+print("Full model (Portuguese): ")
+summary(full_model)$coefficients["higher_yes", ]
+confint(full_model)["higher_yes", ]
+hccm(full_model , type = "hc2" )["higher_yes", "higher_yes"]
 
-summary(lm(G3 ~ ., data=final_data))$coefficients
-confint(lm(G3 ~ ., data=final_data))
+HC2 <- hccm(full_model , type = "hc2" )["higher_yes", "higher_yes"]
+estimator <- summary(full_model)$coefficients["higher_yes", ]['Estimate']
+c(estimator - HC2 * qt(0.975, df.residual(full_model)),
+  estimator - HC2 * qt(0.025, df.residual(full_model)))
 ```
+
+```{r}
+
+print("Restricted model (Portuguese): ")
+
+restricted_model <- lm(G3 ~ ., data=final_data)
+summary(restricted_model)$coefficients["higher_yes", ]
+confint(restricted_model)["higher_yes", ]
+hccm(restricted_model , type = "hc2" )["higher_yes", "higher_yes"]
+
+HC2 <- hccm(restricted_model , type = "hc2" )["higher_yes", "higher_yes"]
+estimator <- summary(restricted_model)$coefficients["higher_yes", ]['Estimate']
+c(estimator - HC2 * qt(0.975, df.residual(restricted_model)),
+  estimator - HC2 * qt(0.025, df.residual(restricted_model)))
+```
+## Logistic Regression of Portuguese on restricted covariates
+
+```{r}
+final_data$G3 <- ifelse(final_data$G3 >= 10, 1, 0)
+summary(glm(G3 ~ ., data = final_data, family = "binomial"))
+```
+
 
 # Model for Math
 
@@ -281,7 +319,8 @@ lasso$lambda.min
 gr_lasso<- cv.gglasso(X, y, 
                       group = group,
                       pred.loss="L2",
-                      loss="ls")
+                      loss="ls",
+                      nfolds = 10)
 
 gr_lasso_fitted <- gglasso(X, y,
                            group = group,
@@ -334,7 +373,8 @@ lasso$lambda.min
 gr_lasso<- cv.gglasso(X, y, 
                       group = group,
                       pred.loss="L2",
-                      loss="ls")
+                      loss="ls",
+                      nfolds = 10)
 
 gr_lasso_fitted <- gglasso(X, y,
                            group = group,
@@ -357,12 +397,29 @@ all_coefs %>% filter(union == TRUE)
 ```
 
 ```{r}
-final_data <- math %>% dplyr::select('age', 'failures', 'absences', 
+final_data <- math %>% dplyr::select('failures', 'absences', 
                                      'higher', 'G3')
 
-summary(full_model)$coefficients
-confint(full_model)
+print("Full model (math): ")
+summary(full_model)$coefficients["higher_yes", ]
+hccm(full_model , type = "hc2" )["higher_yes", "higher_yes"]
+confint(full_model)["higher_yes", ]
 
-summary(lm(G3 ~ ., data=final_data))$coefficients
-confint(lm(G3 ~ ., data=final_data))
+HC2 <- hccm(full_model , type = "hc2" )["higher_yes", "higher_yes"]
+estimator <- summary(full_model)$coefficients["higher_yes", ]['Estimate']
+c(estimator - HC2 * qt(0.975, df.residual(full_model)),
+  estimator - HC2 * qt(0.025, df.residual(full_model)))
+```
+
+```{r}
+print("Restricted model (math): ")
+restricted_model <- lm(G3 ~ ., data=final_data)
+summary(restricted_model)$coefficients["higheryes", ]
+hccm(restricted_model , type = "hc2" )["higheryes", "higheryes"]
+confint(restricted_model)["higheryes", ]
+
+HC2 <- hccm(restricted_model , type = "hc2" )["higheryes", "higheryes"]
+estimator <- summary(restricted_model)$coefficients["higheryes", ]['Estimate']
+c(estimator - HC2 * qt(0.975, df.residual(restricted_model)),
+  estimator - HC2 * qt(0.025, df.residual(restricted_model)))
 ```
