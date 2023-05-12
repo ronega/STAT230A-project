@@ -1,8 +1,5 @@
 ---
-title: "project230A"
-author: "Irina Degtiareva"
-date: "`r Sys.Date()`"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -16,10 +13,10 @@ set.seed(5)
 library(dplyr)
 library(fastDummies)
 
-math <- read.csv("data/student-mat.csv", sep=";")
+math <- read.csv("../data/student-mat.csv", sep=";")
 math <- subset(math, select = -c(school, G1, G2))
 
-por <- read.csv("data/student-por.csv", sep=";")
+por <- read.csv("../data/student-por.csv", sep=";")
 por <- subset(por, select = -c(school, G1, G2))
 ```
 
